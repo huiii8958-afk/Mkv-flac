@@ -8,45 +8,28 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      workflows: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
 
-      - name: Extract ZIP
+      - name: Extract
         run: |
-          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
-          if [ -z "$ZIP_FILE" ]; then
-            echo "::error::ZIP not found"
-            exit 1
-          fi
-          mkdir -p extracted
-          unzip -o "$ZIP_FILE" -d extracted
+          ZIP=$(find . -maxdepth 1 -name "*.zip" | head -1)
+          unzip -o "$ZIP"
+          rm "$ZIP"
 
-      - name: Move files
+      - name: Move if needed
         run: |
-          if [ -d extracted/mkv-flac-player ]; then
+          if [ -d mkv-flac-player ]; then
             shopt -s dotglob
-            mv extracted/mkv-flac-player/* .
+            mv mkv-flac-player/* .
+            rmdir mkv-flac-player
           fi
-
-      - name: Cleanup
-        run: |
-          rm -rf extracted *.zip .github.backup || true
 
       - name: Commit
         run: |
           git config user.name github-actions[bot]
           git config user.email github-actions[bot]@users.noreply.github.com
           git add -A
-          git commit -m "Unpack project" || echo "No changes"
+          git commit -m "Unpack" || echo "No changes"
           git push
-
-      - name: Delete self
-        run: |
-          git rm .github/workflows/unpack.yml || true
-          git commit -m "Remove unpack" || true
-          git push || true
