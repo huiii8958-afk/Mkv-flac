@@ -8,6 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      workflows: write
 
     steps:
       - uses: actions/checkout@v4
@@ -18,61 +19,53 @@ jobs:
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
           if [ -z "$ZIP_FILE" ]; then
-            echo "::error::No ZIP file found in repository root"
+            echo "::error::No ZIP file found"
             exit 1
           fi
           echo "Found ZIP: $ZIP_FILE"
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted/
 
-      - name: Backup current .github if exists
+      - name: Backup existing .github
         run: |
           if [ -d .github ]; then
-            echo "Backing up existing .github folder"
             mv .github .github.backup || true
           fi
 
-      - name: Move extracted files to root
+      - name: Move project files
         run: |
           if [ -d "extracted/mkv-flac-player" ]; then
-            echo "Moving contents of mkv-flac-player/"
             shopt -s dotglob nullglob
             mv extracted/mkv-flac-player/* .
           elif [ -d "extracted/app" ]; then
-            echo "Moving files directly from extracted/"
             shopt -s dotglob nullglob
             mv extracted/* .
           else
-            echo "::error::Unknown project structure inside ZIP"
-            ls -la extracted/
+            echo "::error::Unknown structure"
             exit 1
           fi
 
-      - name: Restore workflows if needed
+      - name: Restore workflows
         run: |
+          mkdir -p .github/workflows
           if [ -d .github.backup/workflows ]; then
-            mkdir -p .github/workflows
-            cp .github.backup/workflows/*.yml .github/workflows/ 2>/dev/null || true
+            cp .github.backup/workflows/* .github/workflows/ 2>/dev/null || true
           fi
-          rm -rf .github.backup || true
+          rm -rf .github.backup extracted || true
 
-      - name: Remove ZIP file
+      - name: Remove ZIP
         run: rm -f *.zip || true
 
-      - name: Commit and push changes
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Unpack project from ZIP [skip ci]"
-            git push
-          fi
+          git commit -m "Unpack project from ZIP" || echo "No changes"
+          git push
 
-      - name: Self-delete this workflow
+      - name: Self delete
         run: |
           git rm .github/workflows/unpack.yml || true
-          git commit -m "Remove temporary unpack workflow" || true
+          git commit -m "Remove unpack workflow" || true
           git push || true
