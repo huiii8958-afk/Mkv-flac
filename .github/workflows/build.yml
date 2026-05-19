@@ -1,0 +1,68 @@
+name: Build APK (Variant 2)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ variant-2, main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Find and extract project ZIP
+        run: |
+          ZIP_FILE=$(find . -name "*.zip" | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No ZIP file found!"
+            exit 1
+          fi
+          echo "Found ZIP: $ZIP_FILE"
+          unzip -o "$ZIP_FILE" -d extracted_project/
+          ls -la extracted_project/
+
+      - name: Move to project root
+        run: |
+          if [ -d "extracted_project/mkv_dac_player_simple" ]; then
+            mv extracted_project/mkv_dac_player_simple/* .
+          elif [ -d "extracted_project/app" ]; then
+            mv extracted_project/* .
+          else
+            echo "Project structure not recognized"
+            ls extracted_project/
+          fi
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew || true
+
+      - name: Generate Gradle wrapper if missing
+        run: |
+          if [ ! -f "./gradlew" ]; then
+            echo "Generating Gradle wrapper..."
+            gradle wrapper --gradle-version 8.7
+          fi
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
