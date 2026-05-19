@@ -11,61 +11,42 @@ jobs:
       workflows: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Find and extract ZIP
+      - name: Extract ZIP
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
           if [ -z "$ZIP_FILE" ]; then
-            echo "::error::No ZIP file found"
+            echo "::error::ZIP not found"
             exit 1
           fi
-          echo "Found ZIP: $ZIP_FILE"
           mkdir -p extracted
-          unzip -o "$ZIP_FILE" -d extracted/
+          unzip -o "$ZIP_FILE" -d extracted
 
-      - name: Backup existing .github
+      - name: Move files
         run: |
-          if [ -d .github ]; then
-            mv .github .github.backup || true
-          fi
-
-      - name: Move project files
-        run: |
-          if [ -d "extracted/mkv-flac-player" ]; then
-            shopt -s dotglob nullglob
+          if [ -d extracted/mkv-flac-player ]; then
+            shopt -s dotglob
             mv extracted/mkv-flac-player/* .
-          elif [ -d "extracted/app" ]; then
-            shopt -s dotglob nullglob
-            mv extracted/* .
-          else
-            echo "::error::Unknown structure"
-            exit 1
           fi
 
-      - name: Restore workflows
+      - name: Cleanup
         run: |
-          mkdir -p .github/workflows
-          if [ -d .github.backup/workflows ]; then
-            cp .github.backup/workflows/* .github/workflows/ 2>/dev/null || true
-          fi
-          rm -rf .github.backup extracted || true
-
-      - name: Remove ZIP
-        run: rm -f *.zip || true
+          rm -rf extracted *.zip .github.backup || true
 
       - name: Commit
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name github-actions[bot]
+          git config user.email github-actions[bot]@users.noreply.github.com
           git add -A
-          git commit -m "Unpack project from ZIP" || echo "No changes"
+          git commit -m "Unpack project" || echo "No changes"
           git push
 
-      - name: Self delete
+      - name: Delete self
         run: |
           git rm .github/workflows/unpack.yml || true
-          git commit -m "Remove unpack workflow" || true
+          git commit -m "Remove unpack" || true
           git push || true
