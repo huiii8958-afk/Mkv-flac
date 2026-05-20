@@ -1,0 +1,89 @@
+name: Unpack ZIP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract ZIP
+        run: |
+          set -e
+          ZIP=$(find . -maxdepth 1 -name "*.zip" | head -1)
+          if [ -z "$ZIP" ]; then
+            echo "::error::ZIP не найден в корне репо"
+            ls -la
+            exit 1
+          fi
+          echo "Найден архив: $ZIP"
+          mkdir -p _tmp
+          unzip -o -q "$ZIP" -d _tmp
+          echo "Содержимое _tmp:"
+          ls -la _tmp/
+
+      - name: Merge files into repo root
+        run: |
+          set -e
+          if [ -d _tmp/mkv-flac-player ]; then
+            SRC=_tmp/mkv-flac-player
+          else
+            SRC=_tmp
+          fi
+          echo "Источник: $SRC"
+          ls -la "$SRC"
+
+          # Сохраняем workflow-файлы для печати — GITHUB_TOKEN не может их коммитить
+          if [ -d "$SRC/.github/workflows" ]; then
+            mkdir -p _workflows_to_print
+            cp "$SRC/.github/workflows/"*.yml _workflows_to_print/ 2>/dev/null || true
+          fi
+
+          # rsync безопасно сливает директории, исключая workflows
+          rsync -a --exclude='.github/workflows/' "$SRC"/ ./
+
+          # Удаляем временные файлы и оригинальный ZIP
+          rm -rf _tmp
+          rm -f *.zip
+
+          echo ""
+          echo "Корень репо после распаковки:"
+          ls -la
+          echo ""
+          echo "Структура .github:"
+          ls -la .github/ 2>/dev/null || echo "(.github отсутствует)"
+
+      - name: Print workflow files for manual creation
+        run: |
+          if [ -d _workflows_to_print ] && [ "$(ls _workflows_to_print 2>/dev/null)" ]; then
+            echo ""
+            echo "═════════════════════════════════════════════════════════════════"
+            echo " ⚠️  GITHUB_TOKEN не имеет прав на запись workflow-файлов."
+            echo "     Создай файлы ниже ВРУЧНУЮ через GitHub веб-интерфейс:"
+            echo "     Add file → Create new file → путь '.github/workflows/<имя>'"
+            echo "═════════════════════════════════════════════════════════════════"
+            for f in _workflows_to_print/*.yml; do
+              echo ""
+              echo "═══ ФАЙЛ: .github/workflows/$(basename $f) ═══"
+              cat "$f"
+              echo "═══ КОНЕЦ ФАЙЛА ═══"
+            done
+            rm -rf _workflows_to_print
+          fi
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "Нечего коммитить."
+            exit 0
+          fi
+          git commit -m "Unpack project files (workflows excluded — manual upload)"
+          git push
